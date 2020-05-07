@@ -147,7 +147,7 @@ class Interpreter(object):
                     else:
                         getattr(self, "run_" + opcode + '_')(*op[1:], **modifier)
                 else:
-                    print("Warning: No run_" + opcode + "() method")
+                    print("Warning: No run_" + opcode + "() method", flush=True)
 
     #
     # Auxiliary methods
@@ -188,7 +188,7 @@ class Interpreter(object):
                 break
             inputline = sys.stdin.readline()
             if not inputline:
-                print("Unexpected end of input file.")
+                print("Unexpected end of input file.", flush=True)
             inputline = inputline[:-1].strip().split()
 
     def _get_value(self, source):
@@ -386,10 +386,10 @@ class Interpreter(object):
     def run_print_string(self, source):
         _res = list(self._get_value((source)))
         for c in _res:
-            print(c, end="")
+            print(c, end="", flush=True)
 
     def run_print_int(self, source):
-        print(self._get_value(source), end="")
+        print(self._get_value(source), end="", flush=True)
 
     run_print_float = run_print_int
     run_print_char = run_print_int
@@ -406,7 +406,7 @@ class Interpreter(object):
             except:
                 v2 = v1
         except:
-            print("Illegal input value.")
+            print("Illegal input value.", flush=True)
         self._alloc_reg(source)
         self._store_value(source, v2)
 
@@ -421,7 +421,7 @@ class Interpreter(object):
             except:
                 v2 = v1
         except:
-            print("Illegal input value.")
+            print("Illegal input value.", flush=True)
         self._alloc_reg(source)
         self._store_value(source, v2)
 
@@ -480,7 +480,15 @@ class Interpreter(object):
         self._alloc_reg(target)
         M[self.vars[target]] = M[self.vars[left]] * M[self.vars[right]]
 
+    def run_mod_int(self, left, right, target):
+        self._alloc_reg(target)
+        M[self.vars[target]] = M[self.vars[left]] % M[self.vars[right]]
+
     def run_div_int(self, left, right, target):
+        self._alloc_reg(target)
+        M[self.vars[target]] = M[self.vars[left]] // M[self.vars[right]]
+
+    def run_div_float(self, left, right, target):
         self._alloc_reg(target)
         M[self.vars[target]] = M[self.vars[left]] / M[self.vars[right]]
 
@@ -488,7 +496,6 @@ class Interpreter(object):
     run_add_float = run_add_int
     run_sub_float = run_sub_int
     run_mul_float = run_mul_int
-    run_div_float = run_div_int
 
     # Integer comparisons
     def run_lt_int(self, left, right, target):
