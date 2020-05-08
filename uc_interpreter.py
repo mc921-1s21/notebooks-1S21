@@ -198,7 +198,9 @@ class Interpreter(object):
             return M[self.vars[source]]
 
     def _load_multiple_values(self, size, varname, target):
-        pass
+        self.vars[target] = self.offset
+        self.offset += size
+        self._store_multiple_values(size, target, varname)
 
     def _push(self):
         # save the addresses of the vars from caller & their last offset
@@ -239,6 +241,7 @@ class Interpreter(object):
         else:
             # We reach the end of main function, so return to system
             # with the code returned by main in the return register.
+            print(flush=True)
             if target is None:
                 # void main () was defined, so exit with value 0
                 sys.exit(0)
@@ -369,7 +372,7 @@ class Interpreter(object):
             elif arg == '*':
                 _ref += 1
         if _ref == 0:
-            self._load_mult_values(_dim, varname, target)
+            self._load_multiple_values(_dim, varname, target)
         elif _dim == 1 and _ref == 1:
             self._alloc_reg(target)
             M[self.vars[target]] = M[self._get_value(varname)]
