@@ -174,7 +174,7 @@ class Compiler:
             else:
                 if opt:
                     self.speedup = len(self.gencode) / len(self.optcode)
-                    sys.stderr.write("speedup = %.2f\n" % self.speedup)
+                    sys.stderr.write("original = %d, otimizado = %d, speedup = %.2f\n" % (len(self.gencode), len(self.optcode), self.speedup)
                 if run_ir and not cfg:
                     self.vm = Interpreter()
                     if opt:
