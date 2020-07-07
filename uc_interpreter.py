@@ -236,7 +236,7 @@ class Interpreter(object):
         else:
             # We reach the end of main function, so return to system
             # with the code returned by main in the return register.
-            print(flush=True)
+            print(end="", flush=True)
             if target is None:
                 # void main () was defined, so exit with value 0
                 sys.exit(0)
