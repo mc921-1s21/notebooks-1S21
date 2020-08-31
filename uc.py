@@ -152,7 +152,7 @@ class Compiler:
             self.gen.show(buf=self.ir_file)
 
     def _opt(self):
-        self.opt = DataFlow(self.args.cfg, self.args.debug)
+        self.opt = DataFlow(self.args.cfg, self.args.verbose)
         self.opt.visit(self.ast)
         self.optcode = self.opt.code
         if not self.args.susy and self.opt_file is not None:
@@ -238,7 +238,7 @@ class Compiler:
                     sys.stderr.write("original = %d, otimizado = %d, speedup = %.2f\n" %
                                      (len(self.gencode), len(self.optcode), speedup))
                 if self.run and not self.args.cfg:
-                    vm = Interpreter()
+                    vm = Interpreter(self.args.idb)
                     if self.args.opt:
                         vm.run(self.optcode)
                     else:
@@ -257,9 +257,10 @@ if __name__ == '__main__':
     parser.add_argument("-a", "--ast", help="dump the AST in the 'filename'.ast", action='store_true')
     parser.add_argument("-i", "--ir", help="dump the uCIR in the 'filename'.ir", action='store_true')
     parser.add_argument("-n", "--no-run", help="do not execute the program", action='store_true')
+    parser.add_argument("-d", "--idb", help="run the interpreter in debug mode", action='store_true')
     parser.add_argument("-c", "--cfg", help="show the CFG for each function in pdf format", action='store_true')
     parser.add_argument("-o", "--opt", help="optimize the uCIR with const prop and dce", action='store_true')
-    parser.add_argument("-d", "--debug", help="print in the stderr some debug informations", action='store_true')
+    parser.add_argument("-v", "--verbose", help="print in the stderr some data analysis informations", action='store_true')
     parser.add_argument("-l", "--llvm", help="generate LLVM IR code in the 'filename'.ll", action='store_true')
     parser.add_argument("-p", "--llvm-opt", choices=['ctm', 'dce', 'cfg', 'all'],
                         help="specify which llvm pass optimizations is enabled")

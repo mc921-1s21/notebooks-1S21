@@ -13,6 +13,46 @@
 import sys
 
 
+def format_instruction(t):
+    operand = t[0].split('_')
+    op = operand[0]
+    ty = None
+    if len(operand) > 1:
+        ty = operand[1]
+    if len(operand) >= 3:
+        for _qual in operand[2:]:
+            if _qual == '*':
+                ty += '*'
+            else:
+                ty += f" [{_qual}]"
+    if len(t) > 1:
+        if op == "define":
+            return f"{op} {ty} {t[1]} " + ', '.join(list(' '.join(el) for el in t[2]))
+        else:
+            _str = "" if op == "global" else "  "
+            if op == 'jump':
+                _str += f"{op} label {t[1]}"
+            elif op == 'cbranch':
+                _str += f"{op} {t[1]} label {t[2]} label {t[3]}"
+            elif op == "global"  and ty.startswith('string'):
+                _str += f"{t[1]} = {op} {ty} \'{t[2]}\'"
+            elif op == "return":
+                _str += f"{op} {ty} {t[1]}"
+            elif op == "store":
+                _str += f"{op} {ty} "
+                for _el in t[1:]:
+                    _str += f"{_el} "
+            else:
+                _str += f"{t[-1]} = {op} {ty} "
+                for _el in t[1:-1]:
+                    _str += f"{_el} "
+            return _str
+    elif ty == 'void':
+        return f"  {op}"
+    else:
+        return f"{op}"
+
+
 class Interpreter(object):
     """
     Runs an interpreter on the uC intermediate code generated for
@@ -40,7 +80,7 @@ class Interpreter(object):
            code as a parameter
     """
 
-    def __init__(self):
+    def __init__(self, debug):
         global inputline, M
         inputline = []
         M = 10000 * [None]      # Memory for global & local vars
@@ -60,14 +100,15 @@ class Interpreter(object):
         self.returns = []       # Stack of return addresses (program counters)
 
         self.pc = 0             # Program Counter
+        self.lastpc = 0         # last pc
         self.start = 0          # PC of the main function
         self.code = None
+        self.debug = debug      # Set the debug mode
 
     def _extract_operation(self, source):
         _modifier = {}
         _aux = source.split('_')
-        if _aux[0] not in {'fptosi', 'sitofp', 'label', 'jump', 'cbranch',
-                           'define', 'call'}:
+        if _aux[0] not in {'fptosi', 'sitofp', 'label', 'jump', 'cbranch', 'call'}:
             _opcode = _aux[0] + '_' + _aux[1]
             for i, _val in enumerate(_aux[2:]):
                 if _val.isdigit():
@@ -87,13 +128,77 @@ class Interpreter(object):
             _value = value
         M[address:address+size] = _value
 
+    def _show_idb_help(self):
+        msg = """ 
+          s, step: run in step mode;
+          g, go <pc>:  goto the program counter;
+          l, list {<start> <end>}? : List the ir code;
+          e, ex {<vars>}+ : Examine the variables;
+          v, view : show he current line of execution;
+          r, run : run (twerminate) the program in normal mode;
+          q, quit : quit (abort) the program;
+          h, help: print this text.
+        """
+        print(msg)
+
+    def _idb(self, pos):
+        _init = pos - 2
+        if _init < 1:
+            _init = 1
+        _end = pos + 3
+        if _end >= self.lastpc:
+            _end = self.lastpc
+        for i in range(_init, _end):
+            mark = ": >> " if i == pos else ":    "
+            print(str(i) + mark + format_instruction(self.code[i]))
+        print()
+        return self._parse_input()
+
+    def _parse_input(self):
+        while True:
+            try:
+                _cmd = list(input("idb> ").strip().split(' '))
+                if _cmd[0] == 's' or _cmd[0] == 'step':
+                    return None
+                elif _cmd[0] == 'g' or _cmd[0] == 'go':
+                    return int(_cmd[1])
+                elif _cmd[0] == 'e' or _cmd[0] == 'ex':
+                    for i in range(1, len(_cmd)):
+                        if _cmd[i].startswith('%'):
+                            print(_cmd[i] + " : " + str(M[self.vars[_cmd[i]]]))
+                        elif _cmd[i].startswith('@'):
+                            print(_cmd[i] + " : " + str(M[self.globals[_cmd[i]]]))
+                        else:
+                            print(_cmd[i] + ": unrecognized var or temp")
+                elif _cmd[0] == 'l' or _cmd[0] == 'list':
+                    if len(_cmd) == 3:
+                        _start = int(_cmd[1])
+                        _end = int(_cmd[2])
+                    else:
+                        _start = 1
+                        _end = self.lastpc
+                    for i in range(_start, _end):
+                        print(str(i) + ":    " + format_instruction(self.code[i]))
+                elif _cmd[0] == 'v' or _cmd[0] == 'view':
+                    self._idb(self.pc)
+                elif _cmd[0] == 'r' or _cmd[0] == 'run':
+                    self.debug = False
+                    return None
+                elif _cmd[0] == 'q' or _cmd[0] == 'quit':
+                    return 0
+                elif _cmd[0] == 'h' or _cmd[0] == 'help':
+                    self._show_idb_help()
+                else:
+                    print(_cmd[0] + " : unrecognized command")
+            except:
+                print("unrecognized command")
+
     def run(self, ircode):
         """
         Run intermediate code in the interpreter.  ircode is a list
         of instruction tuples.  Each instruction (opcode, *args) is
         dispatched to a method self.run_opcode(*args)
         """
-
         # First, store the global vars & constants
         # Also, set the start pc to the main function entry
         self.code = ircode
@@ -101,7 +206,7 @@ class Interpreter(object):
         self.offset = 0
         while True:
             try:
-                op = ircode[self.pc]
+                op = self.code[self.pc]
             except IndexError:
                 break
             if len(op) > 1:  # that is, not label
@@ -132,14 +237,27 @@ class Interpreter(object):
             self.pc += 1
 
         # Now, running the program starting from the main function
+        # If run in debug mode, show the available command lines.
+        if self.debug:
+            print("Interpreter running in debug mode:")
+            self._show_idb_help()
+        self.lastpc = self.pc - 1
         self.pc = self.start
+        _breakpoint = None
         while True:
             try:
+                if _breakpoint is not None:
+                    if _breakpoint == 0:
+                        sys.exit(0)
+                    if self.pc == _breakpoint:
+                        _breakpoint = self._idb(self.pc)
+                elif self.debug:
+                    _breakpoint = self._idb(self.pc)
                 op = ircode[self.pc]
             except IndexError:
                 break
             self.pc += 1
-            if len(op) > 1 or op[0] == 'return_void':
+            if len(op) > 1 or op[0] == 'return_void' or op[0] == 'print_void':
                 opcode, modifier = self._extract_operation(op[0])
                 if hasattr(self, "run_" + opcode):
                     if not modifier:
@@ -204,15 +322,21 @@ class Interpreter(object):
         self.offset += size
         self._store_multiple_values(size, target, varname)
 
-    def _push(self, locs):
+    def _push(self, locs, no_return):
         # save the addresses of the vars from caller & their last offset
         self.stack.append(self.vars)
         self.sp.append(self.offset)
 
         # clear the dictionary of caller local vars and their offsets in memory
-        # and copy the parameters passed to the callee in their local vars.
-        # Finally, cleanup the parameters list used to transfer these vars
+        # alloc the temporary with reg %0 in case of void function and initialize
+        # the memory with None value. Copy the parameters passed to the callee in
+        # their local vars. Finally, cleanup parameters list used to transfer vars
         self.vars = {}
+
+        if no_return:
+            self._alloc_reg('%0')
+            M[self.vars['%0']] = None
+
         for idx, val in enumerate(self.params):
             # Note that arrays (size >=1) are passed by reference only.
             self.vars[locs[idx]] = self.offset
@@ -224,7 +348,10 @@ class Interpreter(object):
     def _pop(self, target):
         if self.returns:
             # get the return value
-            _value = M[target]
+            if target:
+                _value = M[target]
+            else:
+                _value = None
             # restore the vars of the caller
             self.vars = self.stack.pop()
             # store in the caller return register the _value
@@ -306,7 +433,22 @@ class Interpreter(object):
             self.pc = self.vars[false_target]
 
     # Enter the function
-    def run_define(self, source, args):
+    def run_define_int(self, source, args):
+        if source == '@main':
+            # alloc register to the return value but initialize it with "None".
+            # We use the "None" value when main function returns void.
+            self._alloc_reg('%0')
+            # alloc the labels with respective pc's
+            self._alloc_labels()
+        else:
+            # extract the location names of function args
+            _locs = [el[1] for el in args]
+            self._push(_locs, False)
+
+    run_define_float = run_define_int
+    run_define_char = run_define_int
+
+    def run_define_void(self, source, args):
         if source == '@main':
             # alloc register to the return value but not initialize it.
             # We use the "None" value to check if main function returns void.
@@ -316,7 +458,8 @@ class Interpreter(object):
         else:
             # extract the location names of function args
             _locs = [el[1] for el in args]
-            self._push(_locs)
+            self._push(_locs, True)
+
 
     def run_elem_int(self, source, index, target):
         self._alloc_reg(target)
@@ -348,7 +491,10 @@ class Interpreter(object):
         M[self.vars[target]] = value
 
     run_literal_float = run_literal_int
-    run_literal_char = run_literal_int
+
+    def run_literal_char(self, value, target):
+        self._alloc_reg(target)
+        M[self.vars[target]] = value.strip("'")
 
     # Load/stores
     def run_load_int(self, varname, target):
@@ -395,7 +541,7 @@ class Interpreter(object):
     run_print_bool = run_print_int
 
     def run_print_void(self):
-        print(end="\n", flush=True)
+        print(flush=True)
 
     def _read_int(self):
         global inputline
