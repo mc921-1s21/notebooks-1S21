@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ```
 # ============================================================
 # uc -- uC (a.k.a. micro C) language compiler
 #
@@ -7,6 +8,7 @@
 # to read and write to, and invokes the different stages of
 # the compiler proper.
 # ============================================================
+# ```
 
 import sys
 import argparse
