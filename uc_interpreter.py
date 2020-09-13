@@ -2,9 +2,9 @@
 # uc: uc_interpreter.py
 #
 # uCInterpreter class: A simple interpreter for the uC intermediate representation
-#                      see https://github.com/iviarcio/mc921
+#                      see https://github.com/mc921
 #
-# Copyright (c) 2019-2020, Marcio M Pereira All rights reserved.
+# Copyright (c) 2019-2020, Marcio M Pereira. All rights reserved.
 #
 # This software is provided by the author, "as is" without any warranties
 # Redistribution and use in source form with or without modification are
