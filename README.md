@@ -8,9 +8,11 @@ Python programming language for this task because it has clear and direct syntax
 and allows for rapid prototyping. In addition, we will have at our disposal a
 wonderful combination of tools and code in Python that make compilers so cool.
 
-<div style="text-align: right">C is not a “very high level” language, nor a “big” one, and is not specialized to any particular area of application.<br/>
-But its absence of restrictions and its generality make it more convenient and effective for many tasks than supposedly more powerful languages."</div>
-<div style="text-align: right">-- Kernighan and Ritchie</div>
+*C is not a "very high level" language, nor a "big" one, and is not specialized
+to any particular area of application. But its absence of restrictions and its
+generality make it more convenient and effective for many tasks than supposedly
+more powerful languages.*
+-- Kernighan and Ritchie
 
 While you don’t need to be a Python wizard to complete the task, you should feel
 comfortable working with the language, and in particular should know how to
