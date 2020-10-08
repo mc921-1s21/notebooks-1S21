@@ -1,24 +1,19 @@
-#!/usr/bin/env python3
-# ```
 # ============================================================
 # uc -- uC (a.k.a. micro C) language compiler
 #
 # This is the main program for the uc compiler, which just
-# parses command-line options, figures out which source files
-# to read and write to, and invokes the different stages of
-# the compiler proper.
+# invokes the different stages of the compiler proper.
 # ============================================================
-# ```
 
 import sys
 import argparse
 from contextlib import contextmanager
-from uc_parser import UCParser
-from uc_sema import Visitor
-from uc_code import CodeGenerator
-from uc_analysis import DataFlow
-from uc_interpreter import Interpreter
-from uc_llvm import LLVMCodeGenerator
+from uc.uc_parser import UCParser
+from uc.uc_sema import Visitor
+from uc.uc_code import CodeGenerator
+from uc.uc_analysis import DataFlow
+from uc.uc_interpreter import Interpreter
+from uc.uc_llvm import LLVMCodeGenerator
 
 """
 One of the most important (and difficult) parts of writing a compiler
@@ -132,17 +127,22 @@ class Compiler:
         """ Parses the source code. If ast_file != None,
             prints out the abstract syntax tree.
         """
-        self.parser = UCParser()
-        self.ast = self.parser.parse(self.code, '', False)
+        try:
+            self.parser = UCParser()
+            self.ast = self.parser.parse(self.code, '', False)
+            if not self.args.yaml and self.ast_file is not None:
+                self.ast.show(buf=self.ast_file, showcoord=True)
+        except AssertionError as e:
+            error(None, e)
 
     def _sema(self):
-        """ Decorate AST with semantic actions. If ast_file != None,
+        """ Decorate AST with semantic actions. If sem_file != None,
             prints out the abstract syntax tree. """
         try:
             self.sema = Visitor()
             self.sema.visit(self.ast)
-            if not self.args.susy and self.ast_file is not None:
-                self.ast.show(buf=self.ast_file, showcoord=True)
+            if not self.args.yaml and self.sem_file is not None:
+                self.ast.show(buf=self.sem_file, showcoord=True)
         except AssertionError as e:
             error(None, e)
 
@@ -150,23 +150,26 @@ class Compiler:
         self.gen = CodeGenerator(self.args.cfg)
         self.gen.visit(self.ast)
         self.gencode = self.gen.code
-        if not self.args.susy and self.ir_file is not None:
+        if not self.args.yaml and self.ir_file is not None:
             self.gen.show(buf=self.ir_file)
 
     def _opt(self):
         self.opt = DataFlow(self.args.cfg, self.args.verbose)
         self.opt.visit(self.ast)
         self.optcode = self.opt.code
-        if not self.args.susy and self.opt_file is not None:
+        if not self.args.yaml and self.opt_file is not None:
             self.opt.show(buf=self.opt_file)
 
     def _llvm(self):
         self.llvm = LLVMCodeGenerator(self.args.cfg)
         self.llvm.visit(self.ast)
-        if not self.args.susy and self.llvm_file is not None:
+        if not self.args.yaml and self.llvm_file is not None:
             self.llvm.save_ir(self.llvm_file)
         if self.run:
-            self.llvm.execute_ir(self.args.llvm_opt, self.llvm_opt_file)
+            if self.args.llvm_opt:
+                self.llvm.execute_ir(self.args.llvm_opt, self.llvm_opt_file)
+            else:
+                self.llvm.execute_ir(self.args.llvm_opt, self.llvm_file)
 
     def _do_compile(self):
         """ Compiles the code to the given source file. """
@@ -191,35 +194,42 @@ class Compiler:
         open_files = []
 
         self.ast_file = None
-        if self.args.ast and not self.args.susy:
+        if self.args.ast and not self.args.yaml:
             ast_filename = filename[:-3] + '.ast'
             sys.stderr.write("Outputting the AST to %s.\n" % ast_filename)
             self.ast_file = open(ast_filename, 'w')
             open_files.append(self.ast_file)
 
+        self.sem_file = None
+        if self.args.sem and not self.args.yaml:
+            sem_filename = filename[:-3] + '.sem'
+            sys.stderr.write("Outputting the sem to %s.\n" % sem_filename)
+            self.sem_file = open(sem_filename, 'w')
+            open_files.append(self.sem_file)
+
         self.ir_file = None
-        if self.args.ir and not self.args.susy:
+        if self.args.ir and not self.args.yaml:
             ir_filename = filename[:-3] + '.ir'
             sys.stderr.write("Outputting the uCIR to %s.\n" % ir_filename)
             self.ir_file = open(ir_filename, 'w')
             open_files.append(self.ir_file)
 
         self.opt_file = None
-        if self.args.opt and not self.args.susy:
+        if self.args.opt and not self.args.yaml:
             opt_filename = filename[:-3] + '.opt'
             sys.stderr.write("Outputting the optimized uCIR to %s.\n" % opt_filename)
             self.opt_file = open(opt_filename, 'w')
             open_files.append(self.opt_file)
 
         self.llvm_file = None
-        if self.args.llvm and not self.args.susy:
+        if self.args.llvm and not self.args.yaml:
             llvm_filename = filename[:-3] + '.ll'
             sys.stderr.write("Outputting the LLVM IR to %s.\n" % llvm_filename)
             self.llvm_file = open(llvm_filename, 'w')
             open_files.append(self.llvm_file)
 
         self.llvm_opt_file = None
-        if self.args.llvm_opt and not self.args.susy:
+        if self.args.llvm_opt and not self.args.yaml:
             llvm_opt_filename = filename[:-3] + '.opt.ll'
             sys.stderr.write("Outputting the optimized LLVM IR to %s.\n" % llvm_opt_filename)
             self.llvm_opt_file = open(llvm_opt_filename, 'w')
@@ -230,6 +240,8 @@ class Compiler:
         source.close()
 
         self.run = not self.args.no_run
+        if self.args.verbose:
+            sys.stderr.write("Compiling {}:\n".format(filename))
         with subscribe_errors(lambda msg: sys.stderr.write(msg+"\n")):
             self._do_compile()
             if errors_reported():
@@ -237,7 +249,7 @@ class Compiler:
             elif not self.args.llvm:
                 if self.args.opt:
                     speedup = len(self.gencode) / len(self.optcode)
-                    sys.stderr.write("original = %d, otimizado = %d, speedup = %.2f\n" %
+                    sys.stderr.write("default = %d, optimized = %d, speedup = %.2f\n" %
                                      (len(self.gencode), len(self.optcode), speedup))
                 if self.run and not self.args.cfg:
                     vm = Interpreter(self.args.idb)
@@ -250,13 +262,13 @@ class Compiler:
             f.close()
         return 0
 
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("filename")
-    parser.add_argument("-s", "--susy", help="run in the susy machine", action='store_true')
+    parser.add_argument("-y", "--yaml", help="run in the CI (Continuous Integration) mode", action='store_true')
     parser.add_argument("-a", "--ast", help="dump the AST in the 'filename'.ast", action='store_true')
+    parser.add_argument("-s", "--sem", help="dump the decorated AST in the 'filename'.sem", action='store_true')
     parser.add_argument("-i", "--ir", help="dump the uCIR in the 'filename'.ir", action='store_true')
     parser.add_argument("-n", "--no-run", help="do not execute the program", action='store_true')
     parser.add_argument("-d", "--idb", help="run the interpreter in debug mode", action='store_true')
