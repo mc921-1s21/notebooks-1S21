@@ -2,58 +2,20 @@
 # uc: uc_interpreter.py
 #
 # uCInterpreter class: A simple interpreter for the uC intermediate representation
-#                      see https://github.com/mc921
+#                      see https://github.com/iviarcio/mc921
 #
 # Copyright (c) 2019-2020, Marcio M Pereira. All rights reserved.
 #
-# This software is provided by the author, "as is" without any warranties
+# This software is provided by the author, "as is" without any warranties.
 # Redistribution and use in source form with or without modification are
-# permitted but the source code must retain the above copyright notice.
+# permitted, but the source code must retain the above copyright notice.
 # ---------------------------------------------------------------------------------
+import re
 import sys
+from uc.uc_block import format_instruction
 
 
-def format_instruction(t):
-    operand = t[0].split('_')
-    op = operand[0]
-    ty = None
-    if len(operand) > 1:
-        ty = operand[1]
-    if len(operand) >= 3:
-        for _qual in operand[2:]:
-            if _qual == '*':
-                ty += '*'
-            else:
-                ty += f" [{_qual}]"
-    if len(t) > 1:
-        if op == "define":
-            return f"{op} {ty} {t[1]} " + ', '.join(list(' '.join(el) for el in t[2]))
-        else:
-            _str = "" if op == "global" else "  "
-            if op == 'jump':
-                _str += f"{op} label {t[1]}"
-            elif op == 'cbranch':
-                _str += f"{op} {t[1]} label {t[2]} label {t[3]}"
-            elif op == "global"  and ty.startswith('string'):
-                _str += f"{t[1]} = {op} {ty} \'{t[2]}\'"
-            elif op == "return":
-                _str += f"{op} {ty} {t[1]}"
-            elif op == "store":
-                _str += f"{op} {ty} "
-                for _el in t[1:]:
-                    _str += f"{_el} "
-            else:
-                _str += f"{t[-1]} = {op} {ty} "
-                for _el in t[1:-1]:
-                    _str += f"{_el} "
-            return _str
-    elif ty == 'void':
-        return f"  {op}"
-    else:
-        return f"{op}"
-
-
-class Interpreter(object):
+class Interpreter:
     """
     Runs an interpreter on the uC intermediate code generated for
     uC compiler.   The implementation idea is as follows.  Given
@@ -83,38 +45,38 @@ class Interpreter(object):
     def __init__(self, debug):
         global inputline, M
         inputline = []
-        M = 10000 * [None]      # Memory for global & local vars
+        M = 10000 * [None]  # Memory for global & local vars
 
-        self.globals = {}       # Dictionary of address of global vars & constants
-        self.vars = {}          # Dictionary of address of local vars relative to sp
+        self.globals = {}  # Dictionary of address of global vars & constants
+        self.vars = {}  # Dictionary of address of local vars relative to sp
 
-        self.offset = 0         # offset (index) of local & global vars. Note that
-                                # each instance of var has absolute address in Memory
-        self.stack = []         # Stack to save address of vars between calls
-        self.sp = []            # Stack to save & restore the last offset
+        self.offset = 0  # offset (index) of local & global vars. Note that
+        # each instance of var has absolute address in Memory
+        self.stack = []  # Stack to save address of vars between calls
+        self.sp = []  # Stack to save & restore the last offset
 
-        self.params = []        # List of parameters from caller (address)
-        self.result = None      # Result Value (address) from the callee
+        self.params = []  # List of parameters from caller (address)
+        self.result = None  # Result Value (address) from the callee
 
-        self.registers = []     # Stack of register names (in the caller) to return value
-        self.returns = []       # Stack of return addresses (program counters)
+        self.registers = []  # Stack of register names (in the caller) to return value
+        self.returns = []  # Stack of return addresses (program counters)
 
-        self.pc = 0             # Program Counter
-        self.lastpc = 0         # last pc
-        self.start = 0          # PC of the main function
+        self.pc = 0  # Program Counter
+        self.lastpc = 0  # last pc
+        self.start = 0  # PC of the main function
         self.code = None
-        self.debug = debug      # Set the debug mode
+        self.debug = debug  # Set the debug mode
 
     def _extract_operation(self, source):
         _modifier = {}
-        _aux = source.split('_')
-        if _aux[0] not in {'fptosi', 'sitofp', 'label', 'jump', 'cbranch', 'call'}:
-            _opcode = _aux[0] + '_' + _aux[1]
+        _aux = source.split("_")
+        if _aux[0] not in {"fptosi", "sitofp", "label", "jump", "cbranch", "call"}:
+            _opcode = _aux[0] + "_" + _aux[1]
             for i, _val in enumerate(_aux[2:]):
                 if _val.isdigit():
-                    _modifier['dim' + str(i)] = _val
-                elif _val == '*':
-                    _modifier['ptr' + str(i)] = _val
+                    _modifier["dim" + str(i)] = _val
+                elif _val == "*":
+                    _modifier["ptr" + str(i)] = _val
         else:
             _opcode = _aux[0]
         return (_opcode, _modifier)
@@ -126,16 +88,17 @@ class Interpreter(object):
             _value = [item for sublist in value for item in sublist]
         else:
             _value = value
-        M[address:address+size] = _value
+        M[address : address + size] = _value
 
     def _show_idb_help(self):
-        msg = """ 
+        msg = """
           s, step: run in step mode;
           g, go <pc>:  goto the program counter;
           l, list {<start> <end>}? : List the ir code;
           e, ex {<vars>}+ : Examine the variables;
+          a, assign <var> <type> <value>: Assign the value of given type to var;
           v, view : show he current line of execution;
-          r, run : run (twerminate) the program in normal mode;
+          r, run : run (terminate) the program in normal mode;
           q, quit : quit (abort) the program;
           h, help: print this text.
         """
@@ -154,23 +117,96 @@ class Interpreter(object):
         print()
         return self._parse_input()
 
+    def _assign_location(self, loc, uc_type, value):
+        _val = value
+        if uc_type == "int":
+            _val = int(_val)
+        elif uc_type == "float":
+            _val = float(_val)
+        _var = re.split(r"\[|\]", loc)
+        if len(_var) == 1:
+            if loc.startswith("%"):
+                M[self.vars[loc]] = _val
+            elif loc.startswith("@"):
+                M[self.globals[loc]] = _val
+            else:
+                print(loc + ": unrecognized var or temp")
+        elif len(_var) == 3:
+            _address = _var[0]
+            if _var[1].isdigit():
+                _idx = int(_var[1])
+                if loc.startswith("%"):
+                    M[self.vars[_address] + _idx] = _val
+                elif loc.startswith("@"):
+                    M[self.globals[_address] + _idx] = _val
+                else:
+                    print(loc + ": unrecognized var or temp")
+            else:
+                print(loc + ": only assign single var or temp at time")
+        else:
+            print("Construction not supported. For matrices, linearize it.")
+
+    def _view_location(self, loc):
+        _var = re.split(r"\[|\]", loc)
+        if len(_var) == 1:
+            if loc.startswith("%"):
+                print(loc + " : " + str(M[self.vars[loc]]))
+            elif loc.startswith("@"):
+                print(loc + " : " + str(M[self.globals[loc]]))
+            else:
+                print(loc + ": unrecognized var or temp")
+        elif len(_var) == 3:
+            _address = _var[0]
+            if _var[1].isdigit():
+                _idx = int(_var[1])
+                if loc.startswith("%"):
+                    print(loc + " : " + str(M[self.vars[_address] + _idx]))
+                elif loc.startswith("@"):
+                    print(loc + " : " + str(M[self.globals[_address] + _idx]))
+                else:
+                    print(loc + ": unrecognized var or temp")
+            else:
+                _tmp = re.split(":", _var[1])
+                i = int(_tmp[0])
+                j = int(_tmp[1]) + 1
+                if loc.startswith("%"):
+                    print(
+                        loc
+                        + " : "
+                        + str(M[self.vars[_address] + i : self.vars[_address] + j])
+                    )
+                elif loc.startswith("@"):
+                    print(
+                        loc
+                        + " : "
+                        + str(
+                            M[self.globals[_address] + i : self.globals[_address] + j]
+                        )
+                    )
+                else:
+                    print(loc + ": unrecognized var or temp")
+        else:
+            print("Construction not supported. For matrices, linearize it.")
+
     def _parse_input(self):
         while True:
             try:
-                _cmd = list(input("idb> ").strip().split(' '))
-                if _cmd[0] == 's' or _cmd[0] == 'step':
+                _cmd = list(input("idb> ").strip().split(" "))
+                if _cmd[0] == "s" or _cmd[0] == "step":
                     return None
-                elif _cmd[0] == 'g' or _cmd[0] == 'go':
+                elif _cmd[0] == "g" or _cmd[0] == "go":
                     return int(_cmd[1])
-                elif _cmd[0] == 'e' or _cmd[0] == 'ex':
+                elif _cmd[0] == "e" or _cmd[0] == "ex":
                     for i in range(1, len(_cmd)):
-                        if _cmd[i].startswith('%'):
-                            print(_cmd[i] + " : " + str(M[self.vars[_cmd[i]]]))
-                        elif _cmd[i].startswith('@'):
-                            print(_cmd[i] + " : " + str(M[self.globals[_cmd[i]]]))
-                        else:
-                            print(_cmd[i] + ": unrecognized var or temp")
-                elif _cmd[0] == 'l' or _cmd[0] == 'list':
+                        self._view_location(_cmd[i])
+                elif _cmd[0] == "a" or _cmd[0] == "assign":
+                    if len(_cmd) != 4:
+                        print(
+                            "Cmd assign error: Just only single var and type must be specified."
+                        )
+                    else:
+                        self._assign_location(_cmd[1], _cmd[2], _cmd[3])
+                elif _cmd[0] == "l" or _cmd[0] == "list":
                     if len(_cmd) == 3:
                         _start = int(_cmd[1])
                         _end = int(_cmd[2])
@@ -179,18 +215,18 @@ class Interpreter(object):
                         _end = self.lastpc
                     for i in range(_start, _end):
                         print(str(i) + ":    " + format_instruction(self.code[i]))
-                elif _cmd[0] == 'v' or _cmd[0] == 'view':
+                elif _cmd[0] == "v" or _cmd[0] == "view":
                     self._idb(self.pc)
-                elif _cmd[0] == 'r' or _cmd[0] == 'run':
+                elif _cmd[0] == "r" or _cmd[0] == "run":
                     self.debug = False
                     return None
-                elif _cmd[0] == 'q' or _cmd[0] == 'quit':
+                elif _cmd[0] == "q" or _cmd[0] == "quit":
                     return 0
-                elif _cmd[0] == 'h' or _cmd[0] == 'help':
+                elif _cmd[0] == "h" or _cmd[0] == "help":
                     self._show_idb_help()
                 else:
                     print(_cmd[0] + " : unrecognized command")
-            except:
+            except Exception:
                 print("unrecognized command")
 
     def run(self, ircode):
@@ -209,9 +245,9 @@ class Interpreter(object):
                 op = self.code[self.pc]
             except IndexError:
                 break
-            if len(op) > 1:  # that is, not label
+            if len(op) > 1:  # that is, instruction is not a label
                 opcode, modifier = self._extract_operation(op[0])
-                if opcode.startswith('global'):
+                if opcode.startswith("global"):
                     self.globals[op[1]] = self.offset
                     # get the size of global var
                     if not modifier:
@@ -228,12 +264,12 @@ class Interpreter(object):
                         if len(op) == 3:
                             self._copy_data(self.offset, _len, op[2])
                         self.offset += _len
-                elif opcode.startswith('define'):
-                        self.globals[op[1]] = self.offset
-                        M[self.offset] = self.pc
-                        self.offset += 1
-                        if op[1] == '@main':
-                            self.start = self.pc
+                elif opcode.startswith("define"):
+                    self.globals[op[1]] = self.offset
+                    M[self.offset] = self.pc
+                    self.offset += 1
+                    if op[1] == "@main":
+                        self.start = self.pc
             self.pc += 1
 
         # Now, running the program starting from the main function
@@ -257,13 +293,13 @@ class Interpreter(object):
             except IndexError:
                 break
             self.pc += 1
-            if len(op) > 1 or op[0] == 'return_void' or op[0] == 'print_void':
+            if len(op) > 1 or op[0] == "return_void" or op[0] == "print_void":
                 opcode, modifier = self._extract_operation(op[0])
                 if hasattr(self, "run_" + opcode):
                     if not modifier:
                         getattr(self, "run_" + opcode)(*op[1:])
                     else:
-                        getattr(self, "run_" + opcode + '_')(*op[1:], **modifier)
+                        getattr(self, "run_" + opcode + "_")(*op[1:], **modifier)
                 else:
                     print("Warning: No run_" + opcode + "() method", flush=True)
 
@@ -279,12 +315,12 @@ class Interpreter(object):
                 _op = self.code[_lpc]
                 _opcode = _op[0]
                 _lpc += 1
-                if _opcode.startswith('define'):
+                if _opcode.startswith("define"):
                     break
-                elif len(_op) == 1 and _opcode != 'return_void':
+                elif len(_op) == 1 and _opcode != "return_void":
                     # labels don't go to memory, just store the pc on dictionary
                     # labels appears as name:, so we need to extract just the name
-                    self.vars['%' + _opcode[:-1]] = _lpc
+                    self.vars["%" + _opcode[:-1]] = _lpc
             except IndexError:
                 break
 
@@ -296,7 +332,7 @@ class Interpreter(object):
             self.offset += 1
 
     def _get_address(self, source):
-        if source.startswith('@'):
+        if source.startswith("@"):
             return self.globals[source]
         else:
             return self.vars[source]
@@ -312,7 +348,7 @@ class Interpreter(object):
             inputline = inputline[:-1].strip().split()
 
     def _get_value(self, source):
-        if source.startswith('@'):
+        if source.startswith("@"):
             return M[self.globals[source]]
         else:
             return M[self.vars[source]]
@@ -334,8 +370,8 @@ class Interpreter(object):
         self.vars = {}
 
         if no_return:
-            self._alloc_reg('%0')
-            M[self.vars['%0']] = None
+            self._alloc_reg("%0")
+            M[self.vars["%0"]] = None
 
         for idx, val in enumerate(self.params):
             # Note that arrays (size >=1) are passed by reference only.
@@ -371,7 +407,7 @@ class Interpreter(object):
                 sys.exit(M[target])
 
     def _store_deref(self, target, value):
-        if target.startswith('@'):
+        if target.startswith("@"):
             M[M[self.globals[target]]] = value
         else:
             M[M[self.vars[target]]] = value
@@ -379,15 +415,15 @@ class Interpreter(object):
     def _store_multiple_values(self, dim, target, value):
         _left = self._get_address(target)
         _right = self._get_address(value)
-        if value.startswith('@'):
+        if value.startswith("@"):
             if isinstance(M[_right], str):
                 _value = list(M[_right])
-                M[_left:_left+dim] = _value
+                M[_left : _left + dim] = _value
                 return
-        M[_left:_left+dim] = M[_right:_right+dim]
+        M[_left : _left + dim] = M[_right : _right + dim]
 
     def _store_value(self, target, value):
-        if target.startswith('@'):
+        if target.startswith("@"):
             M[self.globals[target]] = value
         else:
             M[self.vars[target]] = value
@@ -408,7 +444,7 @@ class Interpreter(object):
             if arg.isdigit():
                 _dim *= int(arg)
         self.vars[varname] = self.offset
-        M[self.offset:self.offset + _dim] = _dim * [0]
+        M[self.offset : self.offset + _dim] = _dim * [0]
         self.offset += _dim
 
     run_alloc_float_ = run_alloc_int_
@@ -421,7 +457,7 @@ class Interpreter(object):
         # save the return pc in the return stack
         self.returns.append(self.pc)
         # jump to the calle function
-        if source.startswith('@'):
+        if source.startswith("@"):
             self.pc = M[self.globals[source]]
         else:
             self.pc = M[self.vars[source]]
@@ -434,10 +470,10 @@ class Interpreter(object):
 
     # Enter the function
     def run_define_int(self, source, args):
-        if source == '@main':
+        if source == "@main":
             # alloc register to the return value but initialize it with "None".
             # We use the "None" value when main function returns void.
-            self._alloc_reg('%0')
+            self._alloc_reg("%0")
             # alloc the labels with respective pc's
             self._alloc_labels()
         else:
@@ -449,17 +485,16 @@ class Interpreter(object):
     run_define_char = run_define_int
 
     def run_define_void(self, source, args):
-        if source == '@main':
+        if source == "@main":
             # alloc register to the return value but not initialize it.
             # We use the "None" value to check if main function returns void.
-            self._alloc_reg('%0')
+            self._alloc_reg("%0")
             # alloc the labels with respective pc's
             self._alloc_labels()
         else:
             # extract the location names of function args
             _locs = [el[1] for el in args]
             self._push(_locs, True)
-
 
     def run_elem_int(self, source, index, target):
         self._alloc_reg(target)
@@ -511,7 +546,7 @@ class Interpreter(object):
         for arg in kwargs.values():
             if arg.isdigit():
                 _dim *= int(arg)
-            elif arg == '*':
+            elif arg == "*":
                 _ref += 1
         if _ref == 0:
             self._load_multiple_values(_dim, varname, target)
@@ -527,6 +562,13 @@ class Interpreter(object):
 
     run_param_float = run_param_int
     run_param_char = run_param_int
+
+    def run_param_int_(self, source, **kwargs):
+        # Note that arrays are passed by reference
+        self.params.append(self.vars[source])
+
+    run_param_float_ = run_param_int_
+    run_param_char_ = run_param_int_
 
     def run_print_string(self, source):
         _res = list(self._get_value((source)))
@@ -551,9 +593,9 @@ class Interpreter(object):
             inputline = inputline[1:]
             try:
                 v2 = int(v1)
-            except:
+            except Exception:
                 v2 = v1
-        except:
+        except Exception:
             print("Illegal input value.", flush=True)
         return v2
 
@@ -573,9 +615,9 @@ class Interpreter(object):
             inputline = inputline[1:]
             try:
                 v2 = float(v1)
-            except:
+            except Exception:
                 v2 = v1
-        except:
+        except Exception:
             print("Illegal input value.", flush=True)
         return v2
 
@@ -608,7 +650,7 @@ class Interpreter(object):
     run_return_char = run_return_int
 
     def run_return_void(self):
-        self._pop(M[self.vars['%0']])
+        self._pop(M[self.vars["%0"]])
 
     def run_store_int(self, source, target):
         self._store_value(target, self._get_value(source))
@@ -623,7 +665,7 @@ class Interpreter(object):
         for arg in kwargs.values():
             if arg.isdigit():
                 _dim *= int(arg)
-            elif arg == '*':
+            elif arg == "*":
                 _ref += 1
         if _ref == 0:
             self._store_multiple_values(_dim, target, source)
