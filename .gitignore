@@ -1,3 +1,4 @@
 # temporary files of Jupyter notebooks
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
+.idea
