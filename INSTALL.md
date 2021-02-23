@@ -51,7 +51,6 @@ não existir. Neste caso, digite apenas `pip`.
 ```sh
     $ pip3 install jupyter
     $ pip3 install jupyter_contrib_nbextensions
-    $ pip3 install tutormagic
     $ jupyter contrib nbextension install --user
 ```
 

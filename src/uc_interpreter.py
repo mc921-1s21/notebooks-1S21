@@ -4,9 +4,9 @@
 # uCInterpreter class: A simple interpreter for the uC intermediate representation
 #                      see https://github.com/iviarcio/mc921
 #
-# Copyright (c) 2019-2020, Marcio M Pereira. All rights reserved.
+# Copyright (c) 2019-2021, Marcio M Pereira. All rights reserved.
 #
-# This software is provided by the author, "as is" without any warranties.
+# This software is provided by the author "as is", without any warranties.
 # Redistribution and use in source form with or without modification are
 # permitted, but the source code must retain the above copyright notice.
 # ---------------------------------------------------------------------------------
@@ -363,7 +363,7 @@ class Interpreter:
         self.stack.append(self.vars)
         self.sp.append(self.offset)
 
-        # clear the dictionary of caller local vars and their offsets in memory
+        # clear the dictionary of caller local vars and their offsets in memory.
         # alloc the temporary with reg %0 in case of void function and initialize
         # the memory with None value. Copy the parameters passed to the callee in
         # their local vars. Finally, cleanup parameters list used to transfer vars
