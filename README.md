@@ -99,7 +99,7 @@ portability of new compilers. Details about this project are in the
 
 # Readings
 
-The course website is available at https://akluz.wordpress.com/mc921-2s20/ and
+The course website is available at https://akluz.wordpress.com/mc921-1s21/ and
 is loaded with resources for this course. There, you will find the project
 schedule, the slides for this course, additional class notes and articles
 presented in class. It can also contain useful links to learn more about the
@@ -108,11 +108,12 @@ and compilers in general.
 
 # Assignments
 
-The final course grade  will be based on 7 programming projects, and 3 exams
-distributed as follows:
+The final course grade  will be based on 7 programming projects, and 2 exams
+distributed as follows (more details about the grade should be consulted in
+the course website):
 
-    - Projects: 70% (10% each)
-    - Exams: 30% (10% each)
+    - Projects: 70%
+    - Exams: 30%
 
 Projects  will use the GitHub Classroom environment, where each project has an
 associated template repository. Students have to pull the assignment template
@@ -130,9 +131,9 @@ student submit its work even if the testing is incomplete.
 
 # Collaboration policy
 
-Projects are individual assignments. Students can collaborate  with the goals of
-understanding and discussing the assignment solution. Nevertheless, code sharing
-and copying are not allowed, and will be considered fraud.
+Projects are assigned in pairs. The pairs can collaborate with each other for the
+purpose of understanding and discussing the task solution. However, code sharing
+and copying is not allowed and will be considered fraud.
 
 Exams are individual assignments, and collaboration for their execution is not
 permitted. Any violation will be considered fraud.
